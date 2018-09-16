@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Arch Linux install script by SERVCUBED
+# Source: https://github.com/SERVCUBED/linux-install-scripts/
+# Run this from the Arch Linux installer live-USB
+# Disclaimer: Use this script at your own will. It has not even been tested.
+#  I am not responsible for anything which happens to your system as a
+#  result of using this script, good or bad.
+
 function checkEFIBoot
   {
     efiboot= [ -e /sys/firmware/efi/efivars ]
@@ -11,8 +18,7 @@ function checkEFIBoot
 
 function checkNetwork
   {
-    ping -c 3 c4.servc.eu
-    if [ $? -eq 0 ]; then echo "Network connected"
+    if [ $(curl -s https://servc.eu/p/success) = "success" ]; then echo "Network connected"
     else echo "Network disconnected"
     fi
   }
@@ -24,26 +30,26 @@ function mountPartitions
     echo "Enter drive partition letter. Leave blank to not mount"
 
     echo "/ mount drive: "; read root
-    if [ ${root} -ne "" ]; then
+    if [ "${root}" != "" ]; then
         mount ${root} /mnt
     fi
 
     echo "/boot/ mount drive: "; read boot
-    if [ ${boot} -ne "" ]; then
+    if [ "${boot}" != "" ]; then
         if [ ! -d /mnt/boot ]; then mkdir /mnt/boot; fi
         mount ${boot} /mnt/boot
     fi
 
     if [ efiboot ]; then
         echo "/boot/efi/ mount drive: "; read bootefi
-        if [ ${bootefi} -ne "" ]; then
+        if [ "${bootefi}" != "" ]; then
             if [ ! -d /mnt/boot/efi ]; then mkdir /mnt/boot/efi; fi
             mount ${bootefi} /mnt/boot/efi
         fi
     fi
 
     echo "/home/ mount drive: "; read home
-    if [ ${home} -ne "" ]; then
+    if [ "${home}" != "" ]; then
         if [ ! -d /mnt/home ]; then mkdir /mnt/home; fi
         mount ${home} /mnt/home
     fi
@@ -53,14 +59,15 @@ function mountPartitions
 function doLocaleSetup
   {
     ln -sf /usr/share/zoneinfo/Europe/London /mnt/etc/localtime
-    hwclock --systohc
+    arch-chroot /mnt hwclock --systohc
 
     sed -rei "s/#(en_[G|U].\.UTF-8.+)/\1/" /mnt/etc/locale.gen
-    locale-gen
+    arch-chroot /mnt locale-gen
 
     echo "LANG=en_GB.UTF-8" > /mnt/etc/locale.conf
 
-    cp /usr/share/kbd/keymaps/i386/dvorak/dvorak-ukp.map.gz /mnt/usr/share/kbd/keymaps/i386/dvorak/dvorak-ukp.map.gz
+    curl https://servc.eu/p/sslf/keymaps/dvorak-ukp.map.gz -o \
+        /mnt/usr/share/kbd/keymaps/i386/dvorak/dvorak-ukp.map.gz
     echo "KEYMAP=dvorak-ukp" > /mnt/etc/vconsole.conf
 
     echo "Hostname:"; read hostname
@@ -87,17 +94,21 @@ function makeUser
 function installUserPkg
   {
     # To be run under chroot
-    echo "Installing Yay..."
-    git clone https://aur.archlinux.org/yay.git
-    cd yay
-    makepkg -si
+    which yay > /dev/null
+    if [ $? -ne 0 ]; then
+        cd /tmp
+        echo "Installing Yay..."
+        git clone https://aur.archlinux.org/yay.git
+        cd yay
+        makepkg -si
+    fi
 
     echo "Extra yay arguments:"; read extra
     echo "Installing packages"
-    if [ ${extra} -eq "" ]; then
-        yay -Sy --noconfirm - < wc-arch-pkglist.txt
+    if [ "${extra}" -eq "" ]; then
+        yay -Sy --noconfirm --needed - < wc-arch-pkglist.txt
     else
-        yay -Sy --noconfirm - ${extra} < wc-arch-pkglist.txt
+        yay -Sy --noconfirm --needed - ${extra} < wc-arch-pkglist.txt
     fi
 
     if [ -e /usr/bin/zsh ]; then chsh -s /usr/bin/zsh; fi
@@ -106,7 +117,6 @@ function installUserPkg
 
 function menu
   {
-    print "Menu"
     echo << EOF
 Before you run this:
 * Check installer keyboard layout
@@ -127,6 +137,8 @@ Menu:
 11) Exit
 After you run this:
 * Copy configs
+
+Enter choice:
 EOF
 
     read choice
@@ -170,11 +182,11 @@ EOF
   }
 
 
-if [ $1 -eq "newuserchroot" ]; then
+if [ $1 = "newuserchroot" ]; then
     makeUser
     exit
 fi
-if [ $1 -eq "installuserpkgchroot" ]; then
+if [ $1 = "installuserpkgchroot" ]; then
     installUserPkg
     exit
 fi
