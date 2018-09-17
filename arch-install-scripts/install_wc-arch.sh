@@ -129,7 +129,7 @@ Menu:
 3) Generate fstab
 4) Set locale and time zone
 5) Configure mirrors
-6) Initramfs
+6) Make initramfs
 7) Chroot and run manual commands
 8) Create user and configure Sudo
 9) Set root password (Optional)
@@ -165,16 +165,18 @@ EOF
             arch-chroot /mnt
             break;;
         8)
-            cp $0 /mnt/tmp/install_wc-arch.sh
-            arch-chroot /mnt /bin/bash /tmp/install_wc-arch.sh newuserchroot
+            cp "$0" /mnt/install_wc-arch.sh
+            arch-chroot /mnt /bin/bash /install_wc-arch.sh newuserchroot
+            rm -i /mnt/install_wc-arch.sh
             break;;
         9)
             arch-chroot /mnt passwd
             break;;
         10)
-            cp $0 /mnt/tmp/install_wc-arch.sh
-            cp wc-arch-pkglist.txt /mnt/tmp/wc-arch-pkglist.txt
-            arch-chroot /mnt /bin/bash /tmp/install_wc-arch.sh installuserpkgchroot
+            cp "$0" /mnt/install_wc-arch.sh
+            cp "$(dirname $0)/wc-arch-pkglist.txt" /mnt/wc-arch-pkglist.txt
+            arch-chroot /mnt /bin/bash /install_wc-arch.sh installuserpkgchroot
+            rm -i /mnt/install_wc-arch.sh /mnt/wc-arch-pkglist.txt
             break;;
         11)
             exit
