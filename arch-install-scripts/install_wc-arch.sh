@@ -70,12 +70,22 @@ function doLocaleSetup
         /mnt/usr/share/kbd/keymaps/i386/dvorak/dvorak-ukp.map.gz
     echo "KEYMAP=dvorak-ukp" > /mnt/etc/vconsole.conf
 
+    if [ -e /mnt/etc/X11/xorg.conf.d ]; then mkdir -p /mnt/etc/X11/xorg.conf.d; fi
+    cat << EOF > /mnt/etc/X11/xorg.conf.d/00-keyboard.conf
+Section "InputClass"
+        Identifier "system-keyboard"
+        MatchIsKeyboard "on"
+        Option "XkbLayout" "gb,gb"
+	Option "XkbVariant" "dvorakukp,"
+EndSection
+EOF
+
     echo "Hostname:"; read hostname
     echo ${hostname} > /mnt/etc/hostname
-    echo << EOF > /mnt/etc/hostname
+    cat << EOF > /mnt/etc/hostname
 127.0.0.1	localhost
 ::1 	localhost
-127.0.0.1	${hostname}.localdomain	${hostname}"
+127.0.0.1	${hostname}.localdomain	${hostname}
 EOF
   }
 
@@ -117,7 +127,7 @@ function installUserPkg
 
 function menu
   {
-    echo << EOF
+    cat << EOF
 Before you run this:
 * Check installer keyboard layout
 * Connect to the internet
