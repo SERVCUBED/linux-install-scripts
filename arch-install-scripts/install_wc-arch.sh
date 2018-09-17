@@ -43,7 +43,7 @@ function mountPartitions
     if [ efiboot ]; then
         echo "/boot/efi/ mount drive: "; read bootefi
         if [ "${bootefi}" != "" ]; then
-            if [ ! -d /mnt/boot/efi ]; then mkdir /mnt/boot/efi; fi
+            if [ ! -d /mnt/boot/efi ]; then mkdir -p /mnt/boot/efi; fi
             mount ${bootefi} /mnt/boot/efi
         fi
     fi
@@ -61,7 +61,7 @@ function doLocaleSetup
     ln -sf /usr/share/zoneinfo/Europe/London /mnt/etc/localtime
     arch-chroot /mnt hwclock --systohc
 
-    sed -rei "s/#(en_[G|U].\.UTF-8.+)/\1/" /mnt/etc/locale.gen
+    sed -ri "s/#(en_[G|U].\.UTF-8.+)/\1/" /mnt/etc/locale.gen
     arch-chroot /mnt locale-gen
 
     echo "LANG=en_GB.UTF-8" > /mnt/etc/locale.conf
@@ -70,7 +70,7 @@ function doLocaleSetup
         /mnt/usr/share/kbd/keymaps/i386/dvorak/dvorak-ukp.map.gz
     echo "KEYMAP=dvorak-ukp" > /mnt/etc/vconsole.conf
 
-    if [ -e /mnt/etc/X11/xorg.conf.d ]; then mkdir -p /mnt/etc/X11/xorg.conf.d; fi
+    if [ ! -e /mnt/etc/X11/xorg.conf.d ]; then mkdir -p /mnt/etc/X11/xorg.conf.d; fi
     cat << EOF > /mnt/etc/X11/xorg.conf.d/00-keyboard.conf
 Section "InputClass"
         Identifier "system-keyboard"
@@ -82,7 +82,7 @@ EOF
 
     echo "Hostname:"; read hostname
     echo ${hostname} > /mnt/etc/hostname
-    cat << EOF > /mnt/etc/hostname
+    cat << EOF > /mnt/etc/hosts
 127.0.0.1	localhost
 ::1 	localhost
 127.0.0.1	${hostname}.localdomain	${hostname}
@@ -97,31 +97,60 @@ function makeUser
     useradd --create-home ${username}
     passwd ${username}
     usermod -aG wheel ${username}
-    sed -rei "0,/^# %wheel/ s//%wheel/" /etc/sudoers
+    sed -ri "0,/^# %wheel/ s//%wheel/" /etc/sudoers
   }
 
 
 function installUserPkg
   {
     # To be run under chroot
+
+    echo "Enabling multilib"
+    sed -rei "s/#([multilib])/\1\nInclude = \/etc\/pacman.d\/mirrorlist/" /etc/pacman.conf
+
     which yay > /dev/null
     if [ $? -ne 0 ]; then
-        cd /tmp
+        echo "Non-root user:"; read user
+        cd /home/${user}
         echo "Installing Yay..."
-        git clone https://aur.archlinux.org/yay.git
+        pacman -S --noconfirm --needed git
+        sudo -u ${user} git clone https://aur.archlinux.org/yay.git
         cd yay
-        makepkg -si
+        sudo -u ${user} makepkg -s
+        pacman -U yay*.pkg.tar.xz
     fi
 
     echo "Extra yay arguments:"; read extra
     echo "Installing packages"
-    if [ "${extra}" -eq "" ]; then
-        yay -Sy --noconfirm --needed - < wc-arch-pkglist.txt
+    if [ "${extra}" = "" ]; then
+        yay -Sy --noconfirm --needed - < /wc-arch-pkglist.txt
     else
-        yay -Sy --noconfirm --needed - ${extra} < wc-arch-pkglist.txt
+        yay -Sy --noconfirm --needed - ${extra} < /wc-arch-pkglist.txt
     fi
 
     if [ -e /usr/bin/zsh ]; then chsh -s /usr/bin/zsh; fi
+  }
+
+
+function installGRUB
+  {
+    # To be run under chroot
+
+    lsblk
+    echo "Install to disk:"; read disk
+
+    pacman -Sy grub
+
+    echo "Installing BIOS GRUB"
+    grub-install --target=i386-pc ${disk}
+
+    if [ efiboot ]; then
+        echo "Installing UEFI GRUB"
+        grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=BOOT
+    fi
+
+    echo "Generating GRUB configuration file"
+    grub-mkconfig -o /boot/grub/grub.cfg
   }
 
 
@@ -144,7 +173,8 @@ Menu:
 8) Create user and configure Sudo
 9) Set root password (Optional)
 10) Install user packages
-11) Exit
+11) Install GRUB
+12) Exit
 After you run this:
 * Copy configs
 
@@ -155,51 +185,60 @@ EOF
     case ${choice} in
         1)
             mountPartitions
-            break;;
+            ;;
         2)
             pacstrap /mnt base base-devel
-            break;;
+            ;;
         3)
             genfstab -U /mnt >> /mnt/etc/fstab
-            break;;
+            ;;
         4)
             doLocaleSetup
-            break;;
+            ;;
         5)
             vim /mnt/etc/pacman.d/mirrorlist
-            break;;
+            ;;
         6)
             arch-chroot /mnt mkinitcpio -p linux
-            break;;
+            ;;
         7)
             arch-chroot /mnt
-            break;;
+            ;;
         8)
             cp "$0" /mnt/install_wc-arch.sh
             arch-chroot /mnt /bin/bash /install_wc-arch.sh newuserchroot
             rm -i /mnt/install_wc-arch.sh
-            break;;
+            ;;
         9)
             arch-chroot /mnt passwd
-            break;;
+            ;;
         10)
             cp "$0" /mnt/install_wc-arch.sh
             cp "$(dirname $0)/wc-arch-pkglist.txt" /mnt/wc-arch-pkglist.txt
             arch-chroot /mnt /bin/bash /install_wc-arch.sh installuserpkgchroot
             rm -i /mnt/install_wc-arch.sh /mnt/wc-arch-pkglist.txt
-            break;;
+            ;;
+        10)
+            cp "$0" /mnt/install_wc-arch.sh
+            arch-chroot /mnt /bin/bash /install_wc-arch.sh installbootloader
+            rm -i /mnt/install_wc-arch.sh
+            ;;
         11)
             exit
     esac
   }
 
 
-if [ $1 = "newuserchroot" ]; then
+if [ "$1" = "newuserchroot" ]; then
     makeUser
     exit
 fi
-if [ $1 = "installuserpkgchroot" ]; then
+if [ "$1" = "installuserpkgchroot" ]; then
     installUserPkg
+    exit
+fi
+if [ "$1" = "installbootloader" ]; then
+    installGRUB
     exit
 fi
 
