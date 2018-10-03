@@ -218,12 +218,12 @@ EOF
             arch-chroot /mnt /bin/bash /install_wc-arch.sh installuserpkgchroot
             rm -i /mnt/install_wc-arch.sh /mnt/wc-arch-pkglist.txt
             ;;
-        10)
+        11)
             cp "$0" /mnt/install_wc-arch.sh
             arch-chroot /mnt /bin/bash /install_wc-arch.sh installbootloader
             rm -i /mnt/install_wc-arch.sh
             ;;
-        11)
+        12)
             exit
     esac
   }
